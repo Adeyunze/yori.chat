@@ -11,7 +11,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import PeftModel
 from dotenv import load_dotenv
 import logging
-from memory import MemoryManager
+from .memory import MemoryManager
 from collections import defaultdict, deque
 from typing import Dict, List, Generator
 from threading import Thread
