@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database with pgvector extension
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: yori-postgres
+    environment:
+      POSTGRES_DB: yori_db
+      POSTGRES_USER: yori_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yori_secure_pass_2024}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yori_user -d yori_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - yori-network
+
+  # FastAPI application with GPU support
+  yori-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    container_name: yori-fastapi
+    environment:
+      - BASE_MODEL=${BASE_MODEL:-microsoft/Phi-3-mini-4k-instruct}
+      - ADAPTER_DIR=${ADAPTER_DIR:-}
+      - MAX_TOKENS=${MAX_TOKENS:-512}
+      - MEMORY_DIR=/app/memory
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-all-MiniLM-L6-v2}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATABASE_URL=postgresql://yori_user:${POSTGRES_PASSWORD:-yori_secure_pass_2024}@postgres:5432/yori_db
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=yori_db
+      - POSTGRES_USER=yori_user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-yori_secure_pass_2024}
+    ports:
+      - "8000:8000"
+    volumes:
+      - model_cache:/app/models
+      - memory_data:/app/memory
+      - logs_data:/app/logs
+      - ./training:/app/training:ro
+      - ./data:/app/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - yori-network
+
+  # Optional: Redis for caching (can be added later)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: yori-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   command: redis-server --appendonly yes
+  #   restart: unless-stopped
+  #   networks:
+  #     - yori-network
+
+  # Optional: Nginx reverse proxy for production
+  # nginx:
+  #   image: nginx:alpine
+  #   container_name: yori-nginx
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - yori-app
+  #   restart: unless-stopped
+  #   networks:
+  #     - yori-network
+
+volumes:
+  postgres_data:
+    driver: local
+  model_cache:
+    driver: local
+  memory_data:
+    driver: local
+  logs_data:
+    driver: local
+  # redis_data:
+  #   driver: local
+
+networks:
+  yori-network:
+    driver: bridge
