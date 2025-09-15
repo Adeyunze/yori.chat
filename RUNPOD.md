@@ -128,6 +128,12 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 # INFO: Uvicorn running on http://0.0.0.0:8000
 ```
 
+❤️
+
+curl -X POST "https://27u5e78ip5v3e0-8000.proxy.runpod.net/chat" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Hey baby, I missed you today", "user_id": "test_user"}'
+
 ## 4. Expose and Test the API
 
 ### Step 1: Configure Port Exposure
