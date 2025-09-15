@@ -141,15 +141,14 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 curl https://your-pod-id-8000.proxy.runpod.net/health
 
 # Chat endpoint
-curl -X POST https://your-pod-id-8000.proxy.runpod.net/chat \
+curl -X POST https://27u5e78ip5v3e0-8000.proxy.runpod.net/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello, I am testing the deployment!", "user_id": "test_user"}'
 
 # Streaming endpoint
-curl -X POST https://your-pod-id-8000.proxy.runpod.net/stream \
+curl -X POST https://27u5e78ip5v3e0-8000.proxy.runpod.net/stream \
   -H "Content-Type: application/json" \
   -d '{"message": "Tell me a story", "user_id": "test_user"}' \
-  --no-buffer
 ```
 
 ## 5. Stop Pod to Avoid Charges
