@@ -19,27 +19,37 @@ import asyncio
 
 load_dotenv()
 
+# System prompt configuration
+SYSTEM_PROMPT = os.getenv(
+    "SYSTEM_PROMPT", 
+    "You are Yori, a flirty, playful AI companion. Reply warmly and naturally, but keep your messages short like a text — 1–2 sentences max."
+)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Yori Chat API", version="1.0.0")
 
+
 class ChatRequest(BaseModel):
     message: str
     user_id: str = "default"
 
+
 class ChatResponse(BaseModel):
     response: str
+
 
 class StreamRequest(BaseModel):
     message: str
     user_id: str = "default"
 
+
 class YoriModel:
     def __init__(self):
-        self.base_model = "microsoft/Phi-3-mini-4k-instruct"  # Fixed base model
+        self.base_model = "microsoft/Phi-3-mini-4k-instruct"
         self.adapter_dir = os.getenv("ADAPTER_DIR", None)
-        self.max_tokens = int(os.getenv("MAX_TOKENS", "256"))  # Default 256 tokens
+        self.max_tokens = int(os.getenv("MAX_TOKENS", "256"))
         self.model = None
         self.tokenizer = None
         self.memory_manager = MemoryManager()
@@ -93,35 +103,18 @@ class YoriModel:
         # Check for self-harm content
         is_flagged, safe_response = self.moderate(message)
         if is_flagged:
-            # Still add to short-term memory for context
             self.short_term_memory[user_id].append(f"User: {message}")
             self.short_term_memory[user_id].append(f"Yori: {safe_response}")
             return safe_response
         
-        # Get top 3 recalled facts from long-term memory
-        recalled_facts = self.memory_manager.recall(user_id, message, k=3)
-        facts_context = ""
-        if recalled_facts:
-            facts_list = [f"- {fact['text']}" for fact in recalled_facts]
-            facts_context = f"\n\nKnown facts about the user:\n" + "\n".join(facts_list)
+        # Get memory context
+        facts_context = self._get_facts_context(user_id, message)
+        conversation_history = self._get_conversation_history(user_id)
         
-        # Get short-term conversation history
-        conversation_history = ""
-        if user_id in self.short_term_memory:
-            history_turns = list(self.short_term_memory[user_id])
-            if history_turns:
-                conversation_history = "\n\nRecent conversation:\n" + "\n".join(history_turns)
-        
-        # Format the prompt with new persona
-            system_prompt = (
-    "You are Yori, a flirty, playful AI companion. "
-    "Reply warmly and naturally, but keep your messages short like a text — 1–2 sentences max."
-    "Be concise and avoid rambling."
-    )
-        
-        prompt = f"<|system|>\n{system_prompt}{facts_context}{conversation_history}<|end|>\n<|user|>\n{message}<|end|>\n<|assistant|>\n"
+        # Build prompt
+        prompt = f"<|system|>\n{SYSTEM_PROMPT}{facts_context}{conversation_history}<|end|>\n<|user|>\n{message}<|end|>\n<|assistant|>\n"
 
-        # Tokenize and generate
+        # Generate response
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
 
@@ -129,11 +122,11 @@ class YoriModel:
             outputs = self.model.generate(
                 **inputs,
                 max_new_tokens=self.max_tokens,
-                temperature=0.8,  # Slightly higher for more personality
+                temperature=0.8,
                 do_sample=True,
                 top_p=0.9,
-                top_k=40,  # Reduced for more focused responses
-                repetition_penalty=1.05,  # Reduced to allow natural repetition
+                top_k=40,
+                repetition_penalty=1.05,
                 pad_token_id=self.tokenizer.eos_token_id,
                 eos_token_id=self.tokenizer.eos_token_id
             )
@@ -141,14 +134,8 @@ class YoriModel:
         response = self.tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
         response = response.strip()
 
-        # Add to short-term memory
-        self.short_term_memory[user_id].append(f"User: {message}")
-        self.short_term_memory[user_id].append(f"Yori: {response}")
-
-        # Store important information in long-term memory
-        # Only store if the user shares personal information or facts about themselves
-        if self._contains_personal_info(message):
-            self.memory_manager.add_memory(user_id, message)
+        # Update memories
+        self._update_memories(user_id, message, response)
 
         return response
 
@@ -158,34 +145,22 @@ class YoriModel:
         # Check for self-harm content
         is_flagged, safe_response = self.moderate(message)
         if is_flagged:
-            # Still add to short-term memory for context
             self.short_term_memory[user_id].append(f"User: {message}")
             self.short_term_memory[user_id].append(f"Yori: {safe_response}")
             yield safe_response
             return
         
-        # Get top 3 recalled facts from long-term memory
-        recalled_facts = self.memory_manager.recall(user_id, message, k=3)
-        facts_context = ""
-        if recalled_facts:
-            facts_list = [f"- {fact['text']}" for fact in recalled_facts]
-            facts_context = f"\n\nKnown facts about the user:\n" + "\n".join(facts_list)
+        # Get memory context
+        facts_context = self._get_facts_context(user_id, message)
+        conversation_history = self._get_conversation_history(user_id)
         
-        # Get short-term conversation history
-        conversation_history = ""
-        if user_id in self.short_term_memory:
-            history_turns = list(self.short_term_memory[user_id])
-            if history_turns:
-                conversation_history = "\n\nRecent conversation:\n" + "\n".join(history_turns)
-        
-        
-        prompt = f"<|system|>\n{system_prompt}{facts_context}{conversation_history}<|end|>\n<|user|>\n{message}<|end|>\n<|assistant|>\n"
+        # Build prompt
+        prompt = f"<|system|>\n{SYSTEM_PROMPT}{facts_context}{conversation_history}<|end|>\n<|user|>\n{message}<|end|>\n<|assistant|>\n"
 
-        # Tokenize
+        # Setup streaming
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
         inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
 
-        # Set up streaming
         streamer = TextIteratorStreamer(
             self.tokenizer, 
             timeout=60.0, 
@@ -196,17 +171,17 @@ class YoriModel:
         generation_kwargs = {
             **inputs,
             "max_new_tokens": self.max_tokens,
-            "temperature": 0.8,  # Slightly higher for more personality
+            "temperature": 0.8,
             "do_sample": True,
             "top_p": 0.9,
-            "top_k": 40,  # Reduced for more focused responses
-            "repetition_penalty": 1.05,  # Reduced to allow natural repetition
+            "top_k": 40,
+            "repetition_penalty": 1.05,
             "pad_token_id": self.tokenizer.eos_token_id,
             "eos_token_id": self.tokenizer.eos_token_id,
             "streamer": streamer
         }
         
-        # Start generation in a separate thread
+        # Start generation in separate thread
         thread = Thread(target=self.model.generate, kwargs=generation_kwargs)
         thread.start()
         
@@ -218,9 +193,30 @@ class YoriModel:
         
         thread.join()
         
+        # Update memories
+        self._update_memories(user_id, message, full_response)
+
+    def _get_facts_context(self, user_id: str, message: str) -> str:
+        """Get long-term memory facts context."""
+        recalled_facts = self.memory_manager.recall(user_id, message, k=3)
+        if recalled_facts:
+            facts_list = [f"- {fact['text']}" for fact in recalled_facts]
+            return f"\n\nKnown facts about the user:\n" + "\n".join(facts_list)
+        return ""
+
+    def _get_conversation_history(self, user_id: str) -> str:
+        """Get short-term conversation history."""
+        if user_id in self.short_term_memory:
+            history_turns = list(self.short_term_memory[user_id])
+            if history_turns:
+                return "\n\nRecent conversation:\n" + "\n".join(history_turns)
+        return ""
+
+    def _update_memories(self, user_id: str, message: str, response: str):
+        """Update both short-term and long-term memory."""
         # Add to short-term memory
         self.short_term_memory[user_id].append(f"User: {message}")
-        self.short_term_memory[user_id].append(f"Yori: {full_response}")
+        self.short_term_memory[user_id].append(f"Yori: {response}")
 
         # Store important information in long-term memory
         if self._contains_personal_info(message):
@@ -238,12 +234,7 @@ class YoriModel:
         return any(indicator in message_lower for indicator in personal_indicators)
 
     def moderate(self, text: str) -> tuple[bool, str]:
-        """Moderate text for self-harm content.
-        
-        Returns:
-            tuple: (is_flagged, safe_response_if_flagged)
-        """
-        # Self-harm keywords and phrases
+        """Moderate text for self-harm content."""
         self_harm_patterns = [
             r'\b(kill|hurt|harm)\s+(myself|me)\b',
             r'\b(suicide|suicidal)\b',
@@ -272,12 +263,16 @@ class YoriModel:
         
         return False, ""
 
+
+# Initialize model
 yori = YoriModel()
+
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "model": yori.base_model}
+
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
@@ -293,6 +288,7 @@ async def chat(request: ChatRequest):
         logger.error(f"Error generating response: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
 @app.post("/stream")
 async def stream_chat(request: StreamRequest):
     """Streaming chat endpoint using Server Sent Events."""
@@ -304,11 +300,9 @@ async def stream_chat(request: StreamRequest):
             """Generate SSE stream."""
             try:
                 for token in yori.generate_response_stream(request.message, request.user_id):
-                    # Format as Server-Sent Event
                     yield f"data: {json.dumps({'token': token})}\n\n"
-                    await asyncio.sleep(0.01)  # Small delay to prevent overwhelming client
+                    await asyncio.sleep(0.01)
                 
-                # Send end signal
                 yield f"data: {json.dumps({'done': True})}\n\n"
             except Exception as e:
                 logger.error(f"Error in streaming: {str(e)}")
@@ -328,6 +322,7 @@ async def stream_chat(request: StreamRequest):
         logger.error(f"Error in stream endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+
 @app.get("/")
 async def root():
     """Root endpoint with API information."""
@@ -339,6 +334,7 @@ async def root():
             "stream": "POST /stream"
         }
     }
+
 
 if __name__ == "__main__":
     import uvicorn
