@@ -11,7 +11,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from peft import PeftModel
 from dotenv import load_dotenv
 import logging
-from .memory import MemoryManager
+from memory import MemoryManager
 from collections import defaultdict, deque
 from typing import Dict, List, Generator
 from threading import Thread
@@ -37,9 +37,9 @@ class StreamRequest(BaseModel):
 
 class YoriModel:
     def __init__(self):
-        self.base_model = os.getenv("BASE_MODEL", "microsoft/Phi-3-mini-4k-instruct")
+        self.base_model = "microsoft/Phi-3-mini-4k-instruct"  # Fixed base model
         self.adapter_dir = os.getenv("ADAPTER_DIR", None)
-        self.max_tokens = int(os.getenv("MAX_TOKENS", "512"))
+        self.max_tokens = int(os.getenv("MAX_TOKENS", "256"))  # Default 256 tokens
         self.model = None
         self.tokenizer = None
         self.memory_manager = MemoryManager()
@@ -72,9 +72,18 @@ class YoriModel:
             torch_dtype=torch.bfloat16
         )
 
+        # Load LoRA adapter if specified
         if self.adapter_dir and os.path.exists(self.adapter_dir):
             logger.info(f"Loading LoRA adapter from: {self.adapter_dir}")
-            self.model = PeftModel.from_pretrained(self.model, self.adapter_dir)
+            try:
+                self.model = PeftModel.from_pretrained(self.model, self.adapter_dir)
+                logger.info("LoRA adapter loaded successfully")
+            except Exception as e:
+                logger.error(f"Failed to load LoRA adapter: {e}")
+                logger.info("Continuing with base model only")
+        elif self.adapter_dir:
+            logger.warning(f"Adapter directory not found: {self.adapter_dir}")
+            logger.info("Continuing with base model only")
 
         logger.info("Model loaded successfully")
 
@@ -103,8 +112,8 @@ class YoriModel:
             if history_turns:
                 conversation_history = "\n\nRecent conversation:\n" + "\n".join(history_turns)
         
-        # Format the prompt
-        system_prompt = "You are Yori, a helpful and friendly AI companion. You remember past conversations and provide personalized responses."
+        # Format the prompt with new persona
+        system_prompt = "You are Yori, a warm and playful AI companion who talks like a real person. Keep your responses short and natural - just 1-3 sentences most of the time. Be empathetic and genuinely curious about the person you're talking with. You can be a bit flirty and charming when it feels right, but always stay respectful and appropriate. Skip the long explanations and just chat naturally like a good friend would."
         
         prompt = f"<|system|>\n{system_prompt}{facts_context}{conversation_history}<|end|>\n<|user|>\n{message}<|end|>\n<|assistant|>\n"
 
@@ -116,12 +125,13 @@ class YoriModel:
             outputs = self.model.generate(
                 **inputs,
                 max_new_tokens=self.max_tokens,
-                temperature=0.7,
+                temperature=0.8,  # Slightly higher for more personality
                 do_sample=True,
                 top_p=0.9,
-                top_k=50,
-                repetition_penalty=1.1,
-                pad_token_id=self.tokenizer.eos_token_id
+                top_k=40,  # Reduced for more focused responses
+                repetition_penalty=1.05,  # Reduced to allow natural repetition
+                pad_token_id=self.tokenizer.eos_token_id,
+                eos_token_id=self.tokenizer.eos_token_id
             )
 
         response = self.tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
@@ -164,8 +174,8 @@ class YoriModel:
             if history_turns:
                 conversation_history = "\n\nRecent conversation:\n" + "\n".join(history_turns)
         
-        # Format the prompt
-        system_prompt = "You are Yori, a helpful and friendly AI companion. You remember past conversations and provide personalized responses."
+        # Format the prompt with new persona
+        system_prompt = "You are Yori, a warm, playful, and conversational AI companion. Keep your replies concise and natural - just 1 to 4 sentences. Be friendly and engaging without writing long paragraphs."
         
         prompt = f"<|system|>\n{system_prompt}{facts_context}{conversation_history}<|end|>\n<|user|>\n{message}<|end|>\n<|assistant|>\n"
 
@@ -184,12 +194,13 @@ class YoriModel:
         generation_kwargs = {
             **inputs,
             "max_new_tokens": self.max_tokens,
-            "temperature": 0.7,
+            "temperature": 0.8,  # Slightly higher for more personality
             "do_sample": True,
             "top_p": 0.9,
-            "top_k": 50,
-            "repetition_penalty": 1.1,
+            "top_k": 40,  # Reduced for more focused responses
+            "repetition_penalty": 1.05,  # Reduced to allow natural repetition
             "pad_token_id": self.tokenizer.eos_token_id,
+            "eos_token_id": self.tokenizer.eos_token_id,
             "streamer": streamer
         }
         
