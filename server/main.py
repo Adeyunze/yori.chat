@@ -178,8 +178,6 @@ class YoriModel:
             if history_turns:
                 conversation_history = "\n\nRecent conversation:\n" + "\n".join(history_turns)
         
-        # Format the prompt with new persona
-        system_prompt = "You are Yori, a warm, playful, and conversational AI companion. Keep your replies concise and natural - just 1 to 4 sentences. Be friendly and engaging without writing long paragraphs."
         
         prompt = f"<|system|>\n{system_prompt}{facts_context}{conversation_history}<|end|>\n<|user|>\n{message}<|end|>\n<|assistant|>\n"
 
