@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
-    "name": {
+    "user_name": {
       "type": "string",
       "description": "User's preferred name"
     },
@@ -21,20 +21,21 @@
       "type": "string",
       "description": "User's timezone"
     },
-    "style_preferences": {
+    "style": {
       "type": "object",
       "properties": {
-        "communication_style": {
-          "type": "string",
-          "description": "How the user prefers to communicate"
+        "emoji_ok": {
+          "type": "boolean",
+          "description": "Whether the user likes emojis in responses"
         },
-        "formality_level": {
+        "tone": {
           "type": "string",
-          "enum": ["casual", "semi-formal", "formal"]
+          "description": "User's preferred conversation tone"
         },
-        "response_length": {
+        "pace": {
           "type": "string",
-          "enum": ["brief", "moderate", "detailed"]
+          "enum": ["fast", "moderate", "slow"],
+          "description": "User's preferred conversation pace"
         }
       },
       "additionalProperties": true
@@ -58,7 +59,11 @@
       "items": {
         "type": "object",
         "properties": {
-          "description": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for the goal"
+          },
+          "title": {
             "type": "string",
             "description": "What the user wants to achieve"
           },
@@ -66,19 +71,9 @@
             "type": "string",
             "enum": ["active", "completed", "paused", "abandoned"],
             "description": "Current status of the goal"
-          },
-          "created_at": {
-            "type": "string",
-            "format": "date-time",
-            "description": "When the goal was first mentioned"
-          },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "description": "When the goal status was last updated"
           }
         },
-        "required": ["description", "status"],
+        "required": ["id", "title", "status"],
         "additionalProperties": true
       }
     },
