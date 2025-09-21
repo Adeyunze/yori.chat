@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "User's preferred name"
+    },
+    "nicknames": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Alternative names or nicknames the user goes by"
+    },
+    "pronouns": {
+      "type": "string",
+      "description": "User's preferred pronouns"
+    },
+    "timezone": {
+      "type": "string",
+      "description": "User's timezone"
+    },
+    "style_preferences": {
+      "type": "object",
+      "properties": {
+        "communication_style": {
+          "type": "string",
+          "description": "How the user prefers to communicate"
+        },
+        "formality_level": {
+          "type": "string",
+          "enum": ["casual", "semi-formal", "formal"]
+        },
+        "response_length": {
+          "type": "string",
+          "enum": ["brief", "moderate", "detailed"]
+        }
+      },
+      "additionalProperties": true
+    },
+    "likes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Things the user enjoys or has positive feelings about"
+    },
+    "dislikes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Things the user dislikes or has negative feelings about"
+    },
+    "goals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "What the user wants to achieve"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "completed", "paused", "abandoned"],
+            "description": "Current status of the goal"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the goal was first mentioned"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the goal status was last updated"
+          }
+        },
+        "required": ["description", "status"],
+        "additionalProperties": true
+      }
+    },
+    "do_nots": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Specific things the user has asked not to discuss or do"
+    },
+    "last_check_in": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When Yori last had a meaningful conversation with the user"
+    }
+  },
+  "additionalProperties": true,
+  "description": "Memory schema for Yori's user relationship tracking"
+}

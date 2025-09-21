@@ -97,7 +97,7 @@ cd training
 
 # Start training (adjust parameters as needed)
 python train_qlora.py \
-  --model_name microsoft/Phi-3-mini-4k-instruct \
+  --model_name teknium/OpenHermes-2.5-Mistral-7B \
   --data_path ../data/yori_train.jsonl \
   --output_dir ./yori_adapter \
   --max_steps 100 \
