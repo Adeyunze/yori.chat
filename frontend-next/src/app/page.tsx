@@ -44,16 +44,19 @@ export default function Home() {
     }, 800)
 
     try {
-      const response = await fetch('https://27u5e78ip5v3e0-8000.proxy.runpod.net/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: messageToSend,
-          user_id: 'test_user'
-        })
-      })
+      const response = await fetch(
+				"http://localhost:8000/chat",
+				{
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({
+						message: messageToSend,
+						user_id: "test_user",
+					}),
+				}
+			);
 
       const data = await response.json()
       

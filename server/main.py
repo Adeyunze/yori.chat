@@ -55,7 +55,7 @@ class StreamRequest(BaseModel):
 
 class YoriModel:
     def __init__(self):
-        self.base_model = "microsoft/Phi-3-mini-4k-instruct"
+        self.base_model = os.getenv("BASE_MODEL", "teknium/OpenHermes-2.5-Mistral-7B")
         self.adapter_dir = os.getenv("ADAPTER_DIR", None)
         self.max_tokens = int(os.getenv("MAX_TOKENS", "256"))
         self.model = None
