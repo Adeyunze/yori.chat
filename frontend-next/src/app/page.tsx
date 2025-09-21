@@ -45,7 +45,7 @@ export default function Home() {
 
     try {
       const response = await fetch(
-				"http://localhost:8000/chat",
+				"https://09sldnal60n6gk-8000.proxy.runpod.net/chat",
 				{
 					method: "POST",
 					headers: {

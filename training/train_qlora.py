@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-QLoRA Fine-tuning Script for Yori AI Companion
-Fine-tunes microsoft/phi-3-mini-4k-instruct using QLoRA on conversational data.
+QLoRA fine-tuning script for Yori AI Companion.
+Defaults to teknium/OpenHermes-2.5-Mistral-7B and can target any compatible causal LM.
 """
 
 import os
@@ -125,7 +125,7 @@ def setup_lora_config():
     return lora_config
 
 def main():
-    parser = argparse.ArgumentParser(description="Fine-tune Phi-3-mini with QLoRA")
+    parser = argparse.ArgumentParser(description="Fine-tune teknium/OpenHermes-2.5-Mistral-7B with QLoRA")
     parser.add_argument("--data_path", type=str, default="./data/yori_train.jsonl", 
                        help="Path to training data JSONL file")
     parser.add_argument("--out_dir", type=str, default="./yori_flirty_adapter",
@@ -134,7 +134,7 @@ def main():
                        help="Maximum sequence length for training")
     parser.add_argument("--max_samples", type=int, default=None,
                        help="Maximum number of training samples to use")
-    parser.add_argument("--model_name", type=str, default="microsoft/Phi-3-mini-4k-instruct",
+    parser.add_argument("--model_name", type=str, default="teknium/OpenHermes-2.5-Mistral-7B",
                        help="Base model name")
     parser.add_argument("--batch_size", type=int, default=2,
                        help="Training batch size per device")

@@ -115,12 +115,8 @@ class YoriModel:
             self.short_term_memory[user_id].append(f"Yori: {safe_response}")
             return safe_response
         
-        # Get memory context
-        facts_context = self._get_facts_context(user_id, message)
-        conversation_history = self._get_conversation_history(user_id)
-        
-        # Build prompt
-        prompt = f"<|system|>\n{SYSTEM_PROMPT}{facts_context}{conversation_history}<|end|>\n<|user|>\n{message}<|end|>\n<|assistant|>\n"
+        # Build prompt with memory context
+        prompt = self._build_prompt(message, user_id)
 
         # Generate response
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
@@ -140,7 +136,7 @@ class YoriModel:
             )
 
         response = self.tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-        response = response.strip()
+        response = re.split(r"<\|im_end\|>|<\|end\|>", response)[0].strip()
 
         # Update memories
         self._update_memories(user_id, message, response)
@@ -158,12 +154,8 @@ class YoriModel:
             yield safe_response
             return
         
-        # Get memory context
-        facts_context = self._get_facts_context(user_id, message)
-        conversation_history = self._get_conversation_history(user_id)
-        
-        # Build prompt
-        prompt = f"<|system|>\n{SYSTEM_PROMPT}{facts_context}{conversation_history}<|end|>\n<|user|>\n{message}<|end|>\n<|assistant|>\n"
+        # Build prompt with memory context
+        prompt = self._build_prompt(message, user_id)
 
         # Setup streaming
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048)
@@ -195,7 +187,18 @@ class YoriModel:
         
         # Stream tokens
         full_response = ""
+        stop_tokens = ("<|im_end|>", "<|end|>")
         for new_token in streamer:
+            if any(token in new_token for token in stop_tokens):
+                cleaned = new_token
+                for token in stop_tokens:
+                    cleaned = cleaned.replace(token, "")
+                cleaned = cleaned.strip()
+                if cleaned:
+                    full_response += cleaned
+                    yield cleaned
+                break
+
             full_response += new_token
             yield new_token
         
@@ -219,6 +222,32 @@ class YoriModel:
             if history_turns:
                 return "\n\nRecent conversation:\n" + "\n".join(history_turns)
         return ""
+
+    def _build_prompt(self, message: str, user_id: str) -> str:
+        """Build a prompt tailored to the active base model."""
+        facts_context = self._get_facts_context(user_id, message)
+        conversation_history = self._get_conversation_history(user_id)
+        base_context = f"{SYSTEM_PROMPT}{facts_context}{conversation_history}"
+
+        model_name = self.base_model.lower()
+        if "openhermes" in model_name or "mistral" in model_name:
+            return (
+                "<|im_start|>system\n"
+                f"{base_context}\n"
+                "<|im_end|>\n"
+                "<|im_start|>user\n"
+                f"{message}\n"
+                "<|im_end|>\n"
+                "<|im_start|>assistant\n"
+            )
+
+        return (
+            "<|system|>\n"
+            f"{base_context}<|end|>\n"
+            "<|user|>\n"
+            f"{message}<|end|>\n"
+            "<|assistant|>\n"
+        )
 
     def _update_memories(self, user_id: str, message: str, response: str):
         """Update both short-term and long-term memory."""
