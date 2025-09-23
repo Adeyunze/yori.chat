@@ -136,7 +136,7 @@ class YoriModel:
             )
 
         response = self.tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-        response = re.split(r"<\|im_end\|>|<\|end\|>", response)[0].strip()
+        response = self._clean_response(response)
 
         # Update memories
         self._update_memories(user_id, message, response)
@@ -186,26 +186,27 @@ class YoriModel:
         thread.start()
         
         # Stream tokens
-        full_response = ""
-        stop_tokens = ("<|im_end|>", "<|end|>")
+        raw_response = ""
+        emitted_length = 0
+        stop_sequences = ("<|im_end|>", "<|end|>")
         for new_token in streamer:
-            if any(token in new_token for token in stop_tokens):
-                cleaned = new_token
-                for token in stop_tokens:
-                    cleaned = cleaned.replace(token, "")
-                cleaned = cleaned.strip()
-                if cleaned:
-                    full_response += cleaned
-                    yield cleaned
-                break
+            raw_response += new_token
+            cleaned_response = self._clean_response(raw_response)
 
-            full_response += new_token
-            yield new_token
+            if len(cleaned_response) > emitted_length:
+                chunk_to_emit = cleaned_response[emitted_length:]
+                emitted_length = len(cleaned_response)
+                if chunk_to_emit:
+                    yield chunk_to_emit
+
+            if any(seq in raw_response for seq in stop_sequences):
+                break
         
         thread.join()
         
         # Update memories
-        self._update_memories(user_id, message, full_response)
+        final_response = self._clean_response(raw_response)
+        self._update_memories(user_id, message, final_response)
 
     def _get_facts_context(self, user_id: str, message: str) -> str:
         """Get long-term memory facts context."""
@@ -248,6 +249,17 @@ class YoriModel:
             f"{message}<|end|>\n"
             "<|assistant|>\n"
         )
+
+    def _clean_response(self, text: str) -> str:
+        """Strip special chat template tokens and trailing whitespace."""
+        if not text:
+            return ""
+
+        for token in ("<|im_end|>", "<|end|>", "<|user|>", "<|assistant|>", "<|im_start|>"):
+            index = text.find(token)
+            if index != -1:
+                text = text[:index]
+        return text.strip()
 
     def _update_memories(self, user_id: str, message: str, response: str):
         """Update both short-term and long-term memory."""
