@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import TypingIndicator from '@/components/TypingIndicator'
 
 interface Message {
@@ -10,88 +10,101 @@ interface Message {
   timestamp: Date
 }
 
+const DEFAULT_API_BASE = 'https://09sldnal60n6gk-8000.proxy.runpod.net'
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE).replace(/\/$/, '')
+const CHAT_ENDPOINT = `${API_BASE_URL}/chat`
+const TYPING_DELAY_MS = 800
+
+const buildMessage = (text: string, sender: Message['sender']): Message => ({
+  id: Date.now() + Math.random(),
+  text,
+  sender,
+  timestamp: new Date()
+})
+
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
   const [inputValue, setInputValue] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages, isTyping])
+  }, [messages, isTyping, scrollToBottom])
 
-  const sendMessage = async () => {
-    if (!inputValue.trim()) return
-
-    const userMessage: Message = {
-      id: Date.now(),
-      text: inputValue,
-      sender: 'user',
-      timestamp: new Date()
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
     }
+  }, [])
 
-    setMessages(prev => [...prev, userMessage])
-    const messageToSend = inputValue
+  const handleSend = useCallback(async () => {
+    const trimmed = inputValue.trim()
+    if (!trimmed) return
+
+    setMessages(prev => [...prev, buildMessage(trimmed, 'user')])
     setInputValue('')
 
-    // Show typing indicator after 800ms
-    setTimeout(() => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(true)
-    }, 800)
+    }, TYPING_DELAY_MS)
 
     try {
-      const response = await fetch(
-				"https://09sldnal60n6gk-8000.proxy.runpod.net/chat",
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify({
-						message: messageToSend,
-						user_id: "test_user",
-					}),
-				}
-			);
+      const response = await fetch(CHAT_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: trimmed,
+          user_id: 'test_user'
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`Chat request failed with status ${response.status}`)
+      }
 
       const data = await response.json()
-      
-      setIsTyping(false)
-      
-      const yoriMessage: Message = {
-        id: Date.now() + 1,
-        text: data.message || data.response || 'Sorry, I couldn\'t process that.',
-        sender: 'yori',
-        timestamp: new Date()
-      }
+      const reply = data.response ?? data.message ?? "Sorry, I couldn't process that."
 
-      setMessages(prev => [...prev, yoriMessage])
+      setMessages(prev => [...prev, buildMessage(reply, 'yori')])
     } catch (error) {
-      setIsTyping(false)
-      const errorMessage: Message = {
-        id: Date.now() + 1,
-        text: 'Sorry, I\'m having trouble connecting right now.',
-        sender: 'yori',
-        timestamp: new Date()
+      console.error('Failed to send chat message', error)
+      setMessages(prev => [
+        ...prev,
+        buildMessage("Sorry, I'm having trouble connecting right now.", 'yori')
+      ])
+    } finally {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+        typingTimeoutRef.current = null
       }
-      setMessages(prev => [...prev, errorMessage])
+      setIsTyping(false)
+    }
+  }, [inputValue])
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      handleSend()
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    sendMessage()
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault()
+    handleSend()
   }
 
   return (
@@ -147,7 +160,7 @@ export default function Home() {
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
             placeholder="iMessage"
             className="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
             disabled={isTyping}
