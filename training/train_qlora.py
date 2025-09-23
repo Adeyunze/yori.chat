@@ -95,7 +95,7 @@ def setup_model_and_tokenizer(model_name: str):
         device_map="auto",
         trust_remote_code=True,
         torch_dtype=torch.bfloat16,
-        attn_implementation="flash_attention_2" if torch.cuda.is_available() else "eager"
+        attn_implementation="eager"
     )
     
     # Prepare model for k-bit training
