@@ -10,7 +10,7 @@ interface Message {
   timestamp: Date
 }
 
-const DEFAULT_API_BASE = 'https://09sldnal60n6gk-8000.proxy.runpod.net'
+const DEFAULT_API_BASE = "https://jji00yxx1xwxn1-8000.proxy.runpod.net/";
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_BASE).replace(/\/$/, '')
 const CHAT_ENDPOINT = `${API_BASE_URL}/chat`
 const TYPING_DELAY_MS = 800

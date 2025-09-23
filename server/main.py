@@ -54,6 +54,9 @@ class StreamRequest(BaseModel):
 
 
 class YoriModel:
+    STOP_SEQUENCES = ("<|im_end|>", "<|end|>")
+    STRIP_TOKENS = STOP_SEQUENCES + ("<|user|>", "<|assistant|>", "<|im_start|>")
+
     def __init__(self):
         self.base_model = os.getenv("BASE_MODEL", "teknium/OpenHermes-2.5-Mistral-7B")
         self.adapter_dir = os.getenv("ADAPTER_DIR", None)
@@ -188,10 +191,9 @@ class YoriModel:
         # Stream tokens
         raw_response = ""
         emitted_length = 0
-        stop_sequences = ("<|im_end|>", "<|end|>")
         for new_token in streamer:
             raw_response += new_token
-            cleaned_response = self._clean_response(raw_response)
+            cleaned_response = self._clean_response(raw_response, remove_partial=True)
 
             if len(cleaned_response) > emitted_length:
                 chunk_to_emit = cleaned_response[emitted_length:]
@@ -199,7 +201,7 @@ class YoriModel:
                 if chunk_to_emit:
                     yield chunk_to_emit
 
-            if any(seq in raw_response for seq in stop_sequences):
+            if any(seq in raw_response for seq in self.STOP_SEQUENCES):
                 break
         
         thread.join()
@@ -250,16 +252,35 @@ class YoriModel:
             "<|assistant|>\n"
         )
 
-    def _clean_response(self, text: str) -> str:
-        """Strip special chat template tokens and trailing whitespace."""
+    def _clean_response(self, text: str, *, remove_partial: bool = False) -> str:
+        """Strip chat template tokens, optional partial suffixes, and whitespace."""
         if not text:
             return ""
 
-        for token in ("<|im_end|>", "<|end|>", "<|user|>", "<|assistant|>", "<|im_start|>"):
-            index = text.find(token)
-            if index != -1:
-                text = text[:index]
-        return text.strip()
+        cleaned = text
+        for token in self.STRIP_TOKENS:
+            cleaned = cleaned.replace(token, "")
+
+        if remove_partial:
+            cleaned = self._strip_partial_tokens(cleaned)
+
+        return cleaned.strip()
+
+    def _strip_partial_tokens(self, text: str) -> str:
+        """Remove trailing fragments of stop sequences during streaming."""
+        updated = text
+        changed = True
+        while changed:
+            changed = False
+            for token in self.STOP_SEQUENCES:
+                for i in range(1, len(token)):
+                    if updated.endswith(token[:i]):
+                        updated = updated[:-i]
+                        changed = True
+                        break
+                if changed:
+                    break
+        return updated
 
     def _update_memories(self, user_id: str, message: str, response: str):
         """Update both short-term and long-term memory."""
